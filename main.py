@@ -174,7 +174,19 @@ async def edit_with_gemini(image_bytes: bytes, mime: str, prompt: str) -> tuple[
         raise HTTPException(502, "이미지 생성 서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요.")
 
     if resp.status_code != 200:
-        raise HTTPException(502, f"이미지 생성에 실패했어요. (상태 코드 {resp.status_code})")
+        try:
+            err = resp.json().get("error", {})
+            reason = err.get("message", "")
+        except ValueError:
+            reason = resp.text[:300]
+        print(f"[gemini] {resp.status_code} model={GEMINI_IMAGE_MODEL}: {reason}", flush=True)
+        if resp.status_code == 429:
+            raise HTTPException(
+                429,
+                "Gemini API 사용 한도에 걸렸어요. 무료 등급에서는 이미지 생성 모델 한도가 없거나 매우 낮을 수 있어요. "
+                f"AI Studio에서 결제(유료 등급) 설정을 확인해주세요. [Gemini: {reason[:200]}]",
+            )
+        raise HTTPException(502, f"이미지 생성에 실패했어요. (상태 코드 {resp.status_code}) [Gemini: {reason[:200]}]")
 
     data = resp.json()
     for cand in data.get("candidates", []):
